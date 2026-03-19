@@ -456,7 +456,7 @@ def calculate_chart():
             except Exception as e:
                 return jsonify({'error': f'House calc error: {str(e)}', 'success': False}), 500
 
-                # Soul profile
+        # Soul profile
         dominant_element = max(el_counts, key=el_counts.get)
         def ps(key):
             p = next((x for x in planets_result if x['key'] == key), None)
