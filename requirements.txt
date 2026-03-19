@@ -2,5 +2,3 @@ flask==3.0.0
 flask-cors==4.0.0
 pyswisseph==2.10.3.2
 gunicorn==21.2.0
-timezonefinder==6.5.2
-pytz==2024.1
