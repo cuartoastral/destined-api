@@ -414,31 +414,45 @@ def calculate_chart():
         asc_data = mc_data = None
 
         if has_time:
-            cusps, ascmc = swe.houses(jd_ut, lat, lon, b'P')
-            asc_lon = ascmc[0]; mc_lon = ascmc[1]
-            asc_sd = lon_to_sign(asc_lon); mc_sd = lon_to_sign(mc_lon)
-            asc_data = {'lon': round(asc_lon,4), 'sign': asc_sd['sign'], 'signGlyph': asc_sd['glyph'], 'degree': round(asc_sd['degree'],2)}
-            mc_data  = {'lon': round(mc_lon,4),  'sign': mc_sd['sign'],  'signGlyph': mc_sd['glyph'],  'degree': round(mc_sd['degree'],2)}
-            house_cusps = [cusps[i] for i in range(1, 13)]
-            houses_data = [{'house': i+1, 'lon': round(c,4), 'sign': lon_to_sign(c)['sign'],
-                            'signGlyph': lon_to_sign(c)['glyph'], 'degree': round(lon_to_sign(c)['degree'],2)}
-                           for i, c in enumerate(house_cusps)]
-            for p in planets_result:
-                p['house'] = get_house_of(p['lon'], house_cusps)
-            planets_result.append({
-                'key': 'asc', 'name': 'Ascendant', 'glyph': 'AC', 'color': '#e8c96d',
-                'lon': round(asc_lon,4), 'sign': asc_sd['sign'], 'signGlyph': asc_sd['glyph'],
-                'degree': round(asc_sd['degree'],2), 'element': get_element(asc_sd['sign']),
-                'modality': get_modality(asc_sd['sign']), 'retrograde': False, 'house': 1,
-            })
-            planets_result.append({
-                'key': 'mc', 'name': 'Midheaven', 'glyph': 'MC', 'color': '#c9a84c',
-                'lon': round(mc_lon,4), 'sign': mc_sd['sign'], 'signGlyph': mc_sd['glyph'],
-                'degree': round(mc_sd['degree'],2), 'element': get_element(mc_sd['sign']),
-                'modality': get_modality(mc_sd['sign']), 'retrograde': False, 'house': 10,
-            })
+            try:
+                house_result = swe.houses(jd_ut, lat, lon, b'P')
+                # Handle both pyswisseph return formats
+                if isinstance(house_result[0], (list, tuple)):
+                    cusps = house_result[0]
+                    ascmc = house_result[1]
+                else:
+                    cusps = house_result[:13]
+                    ascmc = house_result[13:]
+                asc_lon = float(ascmc[0])
+                mc_lon  = float(ascmc[1])
+                asc_sd  = lon_to_sign(asc_lon)
+                mc_sd   = lon_to_sign(mc_lon)
+                asc_data = {'lon': round(asc_lon,4), 'sign': asc_sd['sign'], 'signGlyph': asc_sd['glyph'], 'degree': round(asc_sd['degree'],2)}
+                mc_data  = {'lon': round(mc_lon,4),  'sign': mc_sd['sign'],  'signGlyph': mc_sd['glyph'],  'degree': round(mc_sd['degree'],2)}
+                house_cusps = [float(cusps[i]) for i in range(1, 13)]
+                houses_data = [{'house': i+1, 'lon': round(c,4),
+                                'sign': lon_to_sign(c)['sign'],
+                                'signGlyph': lon_to_sign(c)['glyph'],
+                                'degree': round(lon_to_sign(c)['degree'],2)}
+                               for i, c in enumerate(house_cusps)]
+                for p in planets_result:
+                    p['house'] = get_house_of(p['lon'], house_cusps)
+                planets_result.append({
+                    'key': 'asc', 'name': 'Ascendant', 'glyph': 'AC', 'color': '#e8c96d',
+                    'lon': round(asc_lon,4), 'sign': asc_sd['sign'], 'signGlyph': asc_sd['glyph'],
+                    'degree': round(asc_sd['degree'],2), 'element': get_element(asc_sd['sign']),
+                    'modality': get_modality(asc_sd['sign']), 'retrograde': False, 'house': 1,
+                })
+                planets_result.append({
+                    'key': 'mc', 'name': 'Midheaven', 'glyph': 'MC', 'color': '#c9a84c',
+                    'lon': round(mc_lon,4), 'sign': mc_sd['sign'], 'signGlyph': mc_sd['glyph'],
+                    'degree': round(mc_sd['degree'],2), 'element': get_element(mc_sd['sign']),
+                    'modality': get_modality(mc_sd['sign']), 'retrograde': False, 'house': 10,
+                })
+            except Exception as e:
+                return jsonify({'error': f'House calc error: {str(e)}', 'success': False}), 500
 
-        # Soul profile
+                # Soul profile
         dominant_element = max(el_counts, key=el_counts.get)
         def ps(key):
             p = next((x for x in planets_result if x['key'] == key), None)
