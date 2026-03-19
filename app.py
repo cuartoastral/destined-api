@@ -57,7 +57,7 @@ TZ_DB = {
     'Africa/Cairo': 2, 'Africa/Johannesburg': 2, 'Africa/Lagos': 1,
     'Africa/Nairobi': 3, 'Africa/Casablanca': 0, 'Africa/Accra': 0,
     'Africa/Addis_Ababa': 3, 'Africa/Khartoum': 3, 'Africa/Dar_es_Salaam': 3,
-    'Asia/Jerusalem': 2, 'Asia/Riyadh': 3, 'Asia/Baghdad': 3,
+    'Asia/Jerusalem': 2, 'Asia/Dubai': 4, 'Asia/Riyadh': 3, 'Asia/Baghdad': 3,
     'Asia/Tehran': 3.5, 'Asia/Beirut': 2, 'Asia/Amman': 2,
 }
 
@@ -189,6 +189,7 @@ GEO_TZ = [
     # Israel
     ((29, 34, 34, 36), 'Asia/Jerusalem'),
     # Saudi Arabia
+    ((22, 27, 51, 57), 'Asia/Dubai'),       # UAE
     ((16, 32, 36, 56), 'Asia/Riyadh'),
     # Iran
     ((25, 40, 44, 64), 'Asia/Tehran'),
@@ -342,32 +343,6 @@ def health():
     })
 
 
-
-@app.route('/debug-houses', methods=['GET'])
-def debug_houses():
-    """Debug endpoint to see exactly what swe.houses returns."""
-    try:
-        import swisseph as swe
-        jd_ut = swe.julday(1978, 2, 23, 7.05)
-        lat, lon = 10.9639, -74.7964
-        
-        raw = swe.houses(jd_ut, lat, lon, b'P')
-        
-        result = {
-            'type': str(type(raw)),
-            'len': len(raw),
-            'item0_type': str(type(raw[0])),
-            'item0_len': len(raw[0]) if hasattr(raw[0], '__len__') else 'no len',
-            'item0_sample': list(raw[0])[:5] if hasattr(raw[0], '__len__') else str(raw[0]),
-        }
-        if len(raw) > 1:
-            result['item1_type'] = str(type(raw[1]))
-            result['item1_len'] = len(raw[1]) if hasattr(raw[1], '__len__') else 'no len'
-            result['item1_sample'] = list(raw[1])[:5] if hasattr(raw[1], '__len__') else str(raw[1])
-        
-        return jsonify({'success': True, 'raw_structure': result})
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
 
 
 @app.route('/chart', methods=['POST'])
