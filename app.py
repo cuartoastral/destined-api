@@ -342,6 +342,34 @@ def health():
     })
 
 
+
+@app.route('/debug-houses', methods=['GET'])
+def debug_houses():
+    """Debug endpoint to see exactly what swe.houses returns."""
+    try:
+        import swisseph as swe
+        jd_ut = swe.julday(1978, 2, 23, 7.05)
+        lat, lon = 10.9639, -74.7964
+        
+        raw = swe.houses(jd_ut, lat, lon, b'P')
+        
+        result = {
+            'type': str(type(raw)),
+            'len': len(raw),
+            'item0_type': str(type(raw[0])),
+            'item0_len': len(raw[0]) if hasattr(raw[0], '__len__') else 'no len',
+            'item0_sample': list(raw[0])[:5] if hasattr(raw[0], '__len__') else str(raw[0]),
+        }
+        if len(raw) > 1:
+            result['item1_type'] = str(type(raw[1]))
+            result['item1_len'] = len(raw[1]) if hasattr(raw[1], '__len__') else 'no len'
+            result['item1_sample'] = list(raw[1])[:5] if hasattr(raw[1], '__len__') else str(raw[1])
+        
+        return jsonify({'success': True, 'raw_structure': result})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/chart', methods=['POST'])
 def calculate_chart():
     try:
