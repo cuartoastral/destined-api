@@ -457,7 +457,8 @@ def calculate_chart():
                 mc_sd   = lon_to_sign(mc_lon)
                 asc_data = {'lon': round(asc_lon,4), 'sign': asc_sd['sign'], 'signGlyph': asc_sd['glyph'], 'degree': round(asc_sd['degree'],2)}
                 mc_data  = {'lon': round(mc_lon,4),  'sign': mc_sd['sign'],  'signGlyph': mc_sd['glyph'],  'degree': round(mc_sd['degree'],2)}
-                house_cusps = [float(cusps[i]) for i in range(1, 13)]
+                # This version of pyswisseph returns cusps[0..11] (no placeholder at index 0)
+                house_cusps = [float(cusps[i]) for i in range(0, 12)]
                 houses_data = [{'house': i+1, 'lon': round(c,4),
                                 'sign': lon_to_sign(c)['sign'],
                                 'signGlyph': lon_to_sign(c)['glyph'],
