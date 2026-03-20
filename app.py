@@ -1,5 +1,5 @@
 """
-Destined Natal Chart API
+Destined Natal Chart API v2
 Swiss Ephemeris + built-in timezone database + Supabase user storage.
 """
 
