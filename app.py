@@ -565,14 +565,41 @@ def send_welcome_email(to_email, name, sun_sign, moon_sign, asc_sign, user_id):
 
 @app.route('/health', methods=['GET'])
 def health():
-    db_status = 'connected' if SUPABASE_URL else 'not configured'
+    db_status     = 'connected'    if SUPABASE_URL                          else 'not configured'
+    resend_status = 'configured'   if os.environ.get('RESEND_API_KEY','')   else 'missing — add RESEND_API_KEY to Render'
     return jsonify({
-        'status': 'ok',
-        'engine': 'Swiss Ephemeris',
-        'version': swe.version,
+        'status':   'ok',
+        'engine':   'Swiss Ephemeris',
+        'version':  swe.version,
         'timezone': 'built-in geo database (no extra deps)',
         'database': db_status,
+        'resend':   resend_status,
     })
+
+
+@app.route('/test-email', methods=['POST'])
+def test_email():
+    """Send a test welcome email. POST {"email": "you@example.com"}"""
+    data = request.get_json() or {}
+    to   = data.get('email','')
+    if not to: return jsonify({'error':'Provide email'}), 400
+
+    resend_key = os.environ.get('RESEND_API_KEY','')
+    if not resend_key:
+        return jsonify({'error':'RESEND_API_KEY not set on server — add it in Render environment variables'}), 500
+
+    success = send_welcome_email(
+        to_email  = to,
+        name      = 'Ingrid',
+        sun_sign  = 'Pisces',
+        moon_sign = 'Virgo',
+        asc_sign  = 'Sagittarius',
+        user_id   = 'test-preview',
+    )
+    if success:
+        return jsonify({'success': True, 'message': f'Test email sent to {to} — check inbox and Resend Logs'})
+    else:
+        return jsonify({'error': 'Email failed — check Render logs for details'})
 
 
 @app.route('/chart', methods=['POST'])
