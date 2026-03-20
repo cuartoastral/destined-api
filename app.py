@@ -1,5 +1,5 @@
 """
-Destined Natal Chart API v2
+Destined Natal Chart API
 Swiss Ephemeris + built-in timezone database + Supabase user storage.
 """
 
@@ -580,6 +580,41 @@ def health():
         'resend':   resend_status,
     })
 
+
+
+@app.route('/email-debug', methods=['GET'])
+def email_debug():
+    """Debug email configuration without sending anything."""
+    import urllib.request, json
+    resend_key = os.environ.get('RESEND_API_KEY', '')
+    
+    if not resend_key:
+        return jsonify({'error': 'RESEND_API_KEY is not set in environment variables'})
+    
+    # Test the Resend API key by listing domains
+    try:
+        req = urllib.request.Request(
+            'https://api.resend.com/domains',
+            headers={'Authorization': f'Bearer {resend_key}'},
+            method='GET'
+        )
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            domains = json.loads(resp.read())
+            return jsonify({
+                'key_works': True,
+                'key_prefix': resend_key[:8] + '...',
+                'domains': domains,
+            })
+    except urllib.error.HTTPError as e:
+        body = e.read().decode()
+        return jsonify({
+            'key_works': False,
+            'http_error': e.code,
+            'error_body': body,
+            'key_prefix': resend_key[:8] + '...',
+        })
+    except Exception as e:
+        return jsonify({'error': str(e), 'key_prefix': resend_key[:8] + '...'})
 
 @app.route('/test-email', methods=['POST'])
 def test_email():
