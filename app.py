@@ -539,7 +539,7 @@ def send_welcome_email(to_email, name, sun_sign, moon_sign, asc_sign, user_id):
 </html>"""
 
     email_data = {
-        "from":    "Destined <hello@cuartoastral.com>",
+        "from":    "Destined <info@cuartoastral.com>",
         "to":      [to_email],
         "subject": f"Welcome to Destined, {name} ✨ Your chart is in the stars",
         "html":    html_body,
