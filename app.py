@@ -442,6 +442,127 @@ def calc_synastry(chart1_planets, chart2_planets):
 # API ENDPOINTS
 # ══════════════════════════════════════════
 
+
+def send_welcome_email(to_email, name, sun_sign, moon_sign, asc_sign, user_id):
+    """Send welcome email via Resend."""
+    resend_key = os.environ.get('RESEND_API_KEY', '')
+    if not resend_key:
+        print("No RESEND_API_KEY set — skipping welcome email")
+        return False
+
+    matches_url = f"https://destined.cuartoastral.com/destined-matches.html?userId={user_id}"
+    
+    asc_line = f"↑ {asc_sign} Rising" if asc_sign else ""
+    
+    html_body = f"""<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+</head>
+<body style="margin:0;padding:0;background:#06060f;font-family:Georgia,serif;">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#06060f;padding:40px 20px;">
+  <tr><td align="center">
+    <table width="560" cellpadding="0" cellspacing="0" style="max-width:560px;width:100%;">
+      
+      <!-- Header -->
+      <tr><td style="text-align:center;padding:40px 40px 32px;border-bottom:1px solid rgba(201,168,76,.2);">
+        <div style="font-family:Georgia,serif;font-size:11px;letter-spacing:6px;color:#c9a84c;text-transform:uppercase;margin-bottom:12px;">DESTINED</div>
+        <div style="font-size:11px;letter-spacing:3px;color:rgba(168,168,192,.5);text-transform:uppercase;">Written in the Stars</div>
+      </td></tr>
+
+      <!-- Main -->
+      <tr><td style="background:#0d0b1e;padding:48px 40px;">
+        <p style="font-size:13px;letter-spacing:3px;color:#c9a84c;text-transform:uppercase;margin:0 0 16px;">Welcome, {name}</p>
+        <h1 style="font-size:32px;font-weight:300;color:#f0eefc;line-height:1.3;margin:0 0 24px;">
+          Your chart is<br>
+          <em style="color:#e8c96d;font-style:italic;">now in the stars.</em>
+        </h1>
+        <p style="font-size:15px;color:#a8a8c0;line-height:1.9;margin:0 0 32px;">
+          You've joined Destined as a founding member. The universe has recorded your natal blueprint — and we're already searching for the souls whose charts align with yours.
+        </p>
+
+        <!-- Placements -->
+        <div style="border:1px solid rgba(201,168,76,.2);padding:28px;margin-bottom:32px;background:rgba(201,168,76,.03);">
+          <div style="font-size:10px;letter-spacing:3px;color:#c9a84c;text-transform:uppercase;margin-bottom:20px;">Your Key Placements</div>
+          <table width="100%" cellpadding="0" cellspacing="0">
+            <tr>
+              <td style="padding:10px 0;border-bottom:1px solid rgba(255,255,255,.05);">
+                <span style="font-size:13px;color:#a8a8c0;">☉ Sun</span>
+                <span style="font-size:16px;font-style:italic;color:#e8c96d;float:right;">{sun_sign}</span>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:10px 0;border-bottom:1px solid rgba(255,255,255,.05);">
+                <span style="font-size:13px;color:#a8a8c0;">☽ Moon</span>
+                <span style="font-size:16px;font-style:italic;color:#e8c96d;float:right;">{moon_sign}</span>
+              </td>
+            </tr>
+            {"<tr><td style='padding:10px 0;'><span style='font-size:13px;color:#a8a8c0;'>↑ Rising</span><span style='font-size:16px;font-style:italic;color:#e8c96d;float:right;'>" + asc_sign + "</span></td></tr>" if asc_sign else ""}
+          </table>
+        </div>
+
+        <!-- Philosophy -->
+        <blockquote style="border-left:2px solid rgba(201,168,76,.3);margin:0 0 32px;padding:16px 20px;background:rgba(201,168,76,.03);">
+          <p style="font-size:16px;font-style:italic;color:#f0eefc;line-height:1.7;margin:0;">
+            "Stop wasting years on the wrong chapter. Your person is already out there — written in the same sky."
+          </p>
+        </blockquote>
+
+        <!-- CTA -->
+        <div style="text-align:center;margin-bottom:32px;">
+          <a href="{matches_url}" style="display:inline-block;background:linear-gradient(135deg,#c9a84c,#a8721e);color:#06060f;padding:16px 40px;font-family:Georgia,serif;font-size:12px;letter-spacing:3px;text-decoration:none;text-transform:uppercase;">
+            View My Matches →
+          </a>
+        </div>
+
+        <p style="font-size:13px;color:rgba(168,168,192,.5);line-height:1.8;margin:0;text-align:center;">
+          As new founding members join, you'll be matched by synastry score.<br>
+          The universe is patient. So are we.
+        </p>
+      </td></tr>
+
+      <!-- Footer -->
+      <tr><td style="padding:24px 40px;text-align:center;border-top:1px solid rgba(255,255,255,.05);">
+        <p style="font-size:11px;color:rgba(168,168,192,.3);letter-spacing:2px;text-transform:uppercase;margin:0;">
+          DESTINED · Written in the Stars
+        </p>
+        <p style="font-size:11px;color:rgba(168,168,192,.2);margin:8px 0 0;">
+          You're receiving this because you joined Destined. Your data is never shared or sold.
+        </p>
+      </td></tr>
+
+    </table>
+  </td></tr>
+</table>
+</body>
+</html>"""
+
+    email_data = {
+        "from":    "Destined <hello@cuartoastral.com>",
+        "to":      [to_email],
+        "subject": f"Welcome to Destined, {name} ✨ Your chart is in the stars",
+        "html":    html_body,
+    }
+
+    try:
+        req = urllib.request.Request(
+            "https://api.resend.com/emails",
+            data=json.dumps(email_data).encode(),
+            headers={
+                "Authorization": f"Bearer {resend_key}",
+                "Content-Type":  "application/json",
+            },
+            method="POST"
+        )
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            result = json.loads(resp.read())
+            print(f"Email sent to {to_email}: {result}")
+            return True
+    except Exception as e:
+        print(f"Email error: {e}")
+        return False
+
 @app.route('/health', methods=['GET'])
 def health():
     db_status = 'connected' if SUPABASE_URL else 'not configured'
@@ -611,6 +732,20 @@ def register_user():
             return jsonify({'error':f'Database error: {err}'}), 500
 
         user_id = result[0]['id'] if result else None
+
+        # Send welcome email (non-blocking — don't fail registration if email fails)
+        try:
+            send_welcome_email(
+                to_email  = data['email'].lower().strip(),
+                name      = data['name'].strip(),
+                sun_sign  = next((p['sign'] for p in planets_result if p['key']=='sun'), ''),
+                moon_sign = next((p['sign'] for p in planets_result if p['key']=='moon'), ''),
+                asc_sign  = asc_data['sign'] if asc_data else None,
+                user_id   = user_id,
+            )
+        except Exception as email_err:
+            print(f"Welcome email failed (non-fatal): {email_err}")
+
         return jsonify({'success':True,'userId':user_id,'message':'Welcome to Destined!'})
 
     except Exception as e:
