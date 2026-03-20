@@ -7,6 +7,7 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 import swisseph as swe
 import math, os, urllib.request, urllib.parse, json, hashlib
+from payments import generate_ai_reading, send_reading_email, create_stripe_session
 
 app = Flask(__name__)
 CORS(app)
@@ -1665,6 +1666,56 @@ def deliver_reading():
 
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+
+@app.route('/create-reading-payment', methods=['POST'])
+def create_reading_payment():
+    try:
+        data    = request.get_json() or {}
+        user_id = data.get('userId','')
+        if not user_id: return jsonify({'error':'userId required'}), 400
+        users, err = supabase_request('GET','users',
+            params={'id':f'eq.{user_id}','select':'*'})
+        if err or not users: return jsonify({'error':'User not found'}), 404
+        session, err = create_stripe_session(users[0], 'https://destined.cuartoastral.com')
+        if err: return jsonify({'error': err}), 500
+        return jsonify({'success':True,'checkoutUrl':session['url'],'sessionId':session['id']})
+    except Exception as e:
+        return jsonify({'error':str(e)}), 500
+
+
+@app.route('/deliver-reading', methods=['POST'])
+def deliver_reading():
+    try:
+        data    = request.get_json() or {}
+        user_id = data.get('userId','')
+        if not user_id: return jsonify({'error':'userId required'}), 400
+        users, err = supabase_request('GET','users',
+            params={'id':f'eq.{user_id}','select':'*'})
+        if err or not users: return jsonify({'error':'User not found'}), 404
+        user = users[0]
+        if user.get('reading_delivered'):
+            return jsonify({'success':True,'message':'Reading already delivered','already_sent':True})
+        reading, err = generate_ai_reading(user)
+        if err: return jsonify({'error':f'Reading failed: {err}'}), 500
+        resend_key = os.environ.get('RESEND_API_KEY','')
+        sent, detail = send_reading_email(user['email'], user['name'], reading, user_id, resend_key)
+        if not sent: return jsonify({'error':f'Email failed: {detail}'}), 500
+        supabase_request('PATCH','users',
+            data={'reading_delivered':True},
+            params={'id':f'eq.{user_id}'})
+        return jsonify({'success':True,'message':f'Reading delivered to {user["email"]}'})
+    except Exception as e:
+        return jsonify({'error':str(e)}), 500
+
+
+@app.route('/reading-status', methods=['GET'])
+def reading_status():
+    """Check if Stripe and Anthropic are configured."""
+    return jsonify({
+        'stripe':    'configured' if os.environ.get('STRIPE_SECRET_KEY') else 'missing',
+        'anthropic': 'configured' if os.environ.get('ANTHROPIC_API_KEY') else 'missing',
+    })
 
 @app.route('/geocode', methods=['GET'])
 def geocode():
