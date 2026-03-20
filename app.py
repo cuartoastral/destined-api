@@ -546,23 +546,27 @@ def send_welcome_email(to_email, name, sun_sign, moon_sign, asc_sign, user_id):
     }
 
     try:
-        req = urllib.request.Request(
-            "https://api.resend.com/emails",
-            data=json.dumps(email_data).encode(),
-            headers={
-                "Authorization": f"Bearer {resend_key}",
-                "Content-Type":  "application/json",
-            },
-            method="POST"
-        )
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            result = json.loads(resp.read())
+        import http.client, ssl
+        payload = json.dumps(email_data).encode('utf-8')
+        headers = {
+            "Authorization": f"Bearer {resend_key}",
+            "Content-Type":  "application/json",
+            "Accept":        "application/json",
+            "User-Agent":    "Destined-App/1.0 Python/3.11",
+        }
+        ctx = ssl.create_default_context()
+        conn = http.client.HTTPSConnection("api.resend.com", context=ctx, timeout=15)
+        conn.request("POST", "/emails", body=payload, headers=headers)
+        resp = conn.getresponse()
+        body = resp.read().decode()
+        conn.close()
+        result = json.loads(body)
+        if resp.status == 200 or resp.status == 201:
             print(f"Email sent to {to_email}: {result}")
             return True, None
-    except urllib.error.HTTPError as e:
-        error_body = e.read().decode()
-        print(f"Email HTTP error {e.code}: {error_body}")
-        return False, f"HTTP {e.code}: {error_body}"
+        else:
+            print(f"Email API error {resp.status}: {body}")
+            return False, f"HTTP {resp.status}: {body}"
     except Exception as e:
         print(f"Email error: {e}")
         return False, str(e)
@@ -593,26 +597,32 @@ def email_debug():
     
     # Test the Resend API key by listing domains
     try:
-        req = urllib.request.Request(
-            'https://api.resend.com/domains',
-            headers={'Authorization': f'Bearer {resend_key}'},
-            method='GET'
-        )
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            domains = json.loads(resp.read())
+        import http.client, ssl
+        headers = {
+            'Authorization': f'Bearer {resend_key}',
+            'Accept': 'application/json',
+            'User-Agent': 'Destined-App/1.0 Python/3.11',
+        }
+        ctx = ssl.create_default_context()
+        conn = http.client.HTTPSConnection("api.resend.com", context=ctx, timeout=15)
+        conn.request("GET", "/domains", headers=headers)
+        resp = conn.getresponse()
+        body = resp.read().decode()
+        conn.close()
+        if resp.status == 200:
+            domains = json.loads(body)
             return jsonify({
                 'key_works': True,
                 'key_prefix': resend_key[:8] + '...',
                 'domains': domains,
             })
-    except urllib.error.HTTPError as e:
-        body = e.read().decode()
-        return jsonify({
-            'key_works': False,
-            'http_error': e.code,
-            'error_body': body,
-            'key_prefix': resend_key[:8] + '...',
-        })
+        else:
+            return jsonify({
+                'key_works': False,
+                'http_error': resp.status,
+                'error_body': body,
+                'key_prefix': resend_key[:8] + '...',
+            })
     except Exception as e:
         return jsonify({'error': str(e), 'key_prefix': resend_key[:8] + '...'})
 
