@@ -558,10 +558,14 @@ def send_welcome_email(to_email, name, sun_sign, moon_sign, asc_sign, user_id):
         with urllib.request.urlopen(req, timeout=10) as resp:
             result = json.loads(resp.read())
             print(f"Email sent to {to_email}: {result}")
-            return True
+            return True, None
+    except urllib.error.HTTPError as e:
+        error_body = e.read().decode()
+        print(f"Email HTTP error {e.code}: {error_body}")
+        return False, f"HTTP {e.code}: {error_body}"
     except Exception as e:
         print(f"Email error: {e}")
-        return False
+        return False, str(e)
 
 @app.route('/health', methods=['GET'])
 def health():
@@ -588,7 +592,7 @@ def test_email():
     if not resend_key:
         return jsonify({'error':'RESEND_API_KEY not set on server — add it in Render environment variables'}), 500
 
-    success = send_welcome_email(
+    result = send_welcome_email(
         to_email  = to,
         name      = 'Ingrid',
         sun_sign  = 'Pisces',
@@ -596,10 +600,17 @@ def test_email():
         asc_sign  = 'Sagittarius',
         user_id   = 'test-preview',
     )
+    success = result[0] if isinstance(result, tuple) else result
+    error   = result[1] if isinstance(result, tuple) else 'Unknown error'
     if success:
-        return jsonify({'success': True, 'message': f'Test email sent to {to} — check inbox and Resend Logs'})
+        return jsonify({'success': True, 'message': f'Test email sent to {to} — check inbox!'})
     else:
-        return jsonify({'error': 'Email failed — check Render logs for details'})
+        return jsonify({
+            'success': False,
+            'error': error,
+            'from_address': 'info@cuartoastral.com',
+            'resend_key_loaded': bool(os.environ.get('RESEND_API_KEY',''))
+        })
 
 
 @app.route('/chart', methods=['POST'])
@@ -762,7 +773,7 @@ def register_user():
 
         # Send welcome email (non-blocking — don't fail registration if email fails)
         try:
-            send_welcome_email(
+            email_result = send_welcome_email(
                 to_email  = data['email'].lower().strip(),
                 name      = data['name'].strip(),
                 sun_sign  = next((p['sign'] for p in planets_result if p['key']=='sun'), ''),
@@ -770,6 +781,8 @@ def register_user():
                 asc_sign  = asc_data['sign'] if asc_data else None,
                 user_id   = user_id,
             )
+            if isinstance(email_result, tuple) and not email_result[0]:
+                print(f"Welcome email failed (non-fatal): {email_result[1]}")
         except Exception as email_err:
             print(f"Welcome email failed (non-fatal): {email_err}")
 
