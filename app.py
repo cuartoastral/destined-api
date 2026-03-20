@@ -705,6 +705,75 @@ def build_planets_from_record(record):
 
 
 
+
+@app.route('/user-by-email', methods=['GET'])
+def user_by_email():
+    """Look up a user by email or id for login."""
+    email = request.args.get('email','')
+    uid   = request.args.get('id','')
+
+    if email:
+        users, err = supabase_request('GET','users',
+            params={'email':f'eq.{email.lower().strip()}','select':'*','limit':'1'})
+    elif uid:
+        users, err = supabase_request('GET','users',
+            params={'id':f'eq.{uid}','select':'*','limit':'1'})
+    else:
+        return jsonify({'error':'Provide email or id'}), 400
+
+    if err:   return jsonify({'error':err}), 500
+    if not users: return jsonify({'success':False,'error':'Not found'}), 404
+    return jsonify({'success':True,'userId':users[0]['id'],'user':users[0]})
+
+
+@app.route('/messages', methods=['GET'])
+def get_messages():
+    """Get conversation between two users."""
+    user1 = request.args.get('user1','')
+    user2 = request.args.get('user2','')
+    if not user1 or not user2:
+        return jsonify({'error':'Provide user1 and user2'}), 400
+
+    # Get messages in both directions
+    msgs1, _ = supabase_request('GET','messages', params={
+        'sender_id':  f'eq.{user1}',
+        'receiver_id':f'eq.{user2}',
+        'select':'*','order':'created_at.asc','limit':'100'
+    })
+    msgs2, _ = supabase_request('GET','messages', params={
+        'sender_id':  f'eq.{user2}',
+        'receiver_id':f'eq.{user1}',
+        'select':'*','order':'created_at.asc','limit':'100'
+    })
+
+    all_msgs = (msgs1 or []) + (msgs2 or [])
+    all_msgs.sort(key=lambda m: m.get('created_at',''))
+    return jsonify({'success':True,'messages':all_msgs})
+
+
+@app.route('/messages', methods=['POST'])
+def send_message():
+    """Send a message between two users."""
+    data = request.get_json()
+    if not data: return jsonify({'error':'No data'}), 400
+
+    required = ['sender_id','receiver_id','content']
+    for f in required:
+        if f not in data: return jsonify({'error':f'Missing {f}'}), 400
+
+    content = str(data['content']).strip()
+    if not content: return jsonify({'error':'Empty message'}), 400
+    if len(content) > 2000: return jsonify({'error':'Message too long'}), 400
+
+    msg = {
+        'sender_id':   data['sender_id'],
+        'receiver_id': data['receiver_id'],
+        'content':     content,
+    }
+    result, err = supabase_request('POST','messages', msg)
+    if err: return jsonify({'error':err}), 500
+    return jsonify({'success':True,'message':result[0] if result else {}})
+
 @app.route('/admin/users', methods=['GET'])
 def admin_users():
     """Admin endpoint — returns all users. Protected by admin key."""
