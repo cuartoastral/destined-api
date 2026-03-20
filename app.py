@@ -704,6 +704,32 @@ def build_planets_from_record(record):
     return planets
 
 
+
+@app.route('/admin/users', methods=['GET'])
+def admin_users():
+    """Admin endpoint — returns all users. Protected by admin key."""
+    admin_key = request.headers.get('X-Admin-Key','')
+    expected  = os.environ.get('ADMIN_PASSWORD','destined2025')
+    if admin_key != expected:
+        return jsonify({'error':'Unauthorized'}), 401
+
+    limit  = int(request.args.get('limit', 500))
+    offset = int(request.args.get('offset', 0))
+
+    users, err = supabase_request('GET', 'users', params={
+        'select': 'id,created_at,name,email,gender,seeking,my_age_range,seek_age_range,'
+                  'birth_year,birth_month,birth_day,birth_hour,birth_minute,'
+                  'birth_city,has_time,sun_sign,moon_sign,asc_sign,venus_sign,'
+                  'mars_sign,dominant_element,chart_json',
+        'order':  'created_at.desc',
+        'limit':  str(limit),
+        'offset': str(offset),
+    })
+    if err:
+        return jsonify({'error': err}), 500
+
+    return jsonify({'success': True, 'users': users or [], 'total': len(users or [])})
+
 @app.route('/geocode', methods=['GET'])
 def geocode():
     query = request.args.get('q','')
