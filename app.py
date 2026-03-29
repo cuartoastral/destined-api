@@ -1076,30 +1076,34 @@ def reading_status():
         'anthropic': 'configured' if os.environ.get('ANTHROPIC_API_KEY') else 'missing',
     })
 
+
 @app.route('/deliver-reading-get', methods=['GET'])
 def deliver_reading_get():
+    """Trigger reading delivery via GET request (browser-friendly)."""
     user_id = request.args.get('userId','')
     if not user_id:
-        return '<h2 style="padding:40px;color:red">Provide userId parameter</h2>'
+        return jsonify({'error':'Provide userId parameter'}), 400
     try:
-        users, err = supabase_request('GET','users',params={'id':f'eq.{user_id}','select':'*'})
+        users, err = supabase_request('GET','users',
+            params={'id':f'eq.{user_id}','select':'*'})
         if err or not users:
-            return '<h2 style="padding:40px;color:red">User not found</h2>'
+            return jsonify({'error':'User not found'}), 404
         user = users[0]
         if user.get('reading_delivered'):
-            return f'<h2 style="padding:40px;color:green">✓ Reading already delivered to {user["email"]} — check your inbox!</h2>'
+            return f"<h2 style='font-family:serif;color:green;padding:40px'>✓ Reading already delivered to {user['email']} — check your inbox!</h2>"
         from payments import generate_ai_reading, send_reading_email
         reading, err = generate_ai_reading(user)
         if err:
-            return f'<h2 style="padding:40px;color:red">Reading failed: {err}</h2>'
+            return f"<h2 style='font-family:serif;color:red;padding:40px'>✗ Reading generation failed: {err}</h2>"
         resend_key = os.environ.get('RESEND_API_KEY','')
         sent, detail = send_reading_email(user['email'], user['name'], reading, user_id, resend_key)
         if not sent:
-            return f'<h2 style="padding:40px;color:red">Email failed: {detail}</h2>'
+            return f"<h2 style='font-family:serif;color:red;padding:40px'>✗ Email failed: {detail}</h2>"
         supabase_request('PATCH','users',data={'reading_delivered':True},params={'id':f'eq.{user_id}'})
-        return f'<h2 style="padding:40px;color:green">✓ Reading delivered to {user["email"]} — check your inbox!</h2>'
+        return f"<h2 style='font-family:serif;color:green;padding:40px'>✓ Reading delivered to {user['email']} — check your inbox now!</h2>"
     except Exception as e:
-        return f'<h2 style="padding:40px;color:red">Error: {str(e)}</h2>'
+        return f"<h2 style='font-family:serif;color:red;padding:40px'>✗ Error: {str(e)}</h2>"
+
 @app.route('/geocode', methods=['GET'])
 def geocode():
     query = request.args.get('q','')
