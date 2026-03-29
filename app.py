@@ -378,13 +378,65 @@ ASPECT_ANGLES = {'conjunction':0,'opposition':180,'trine':120,'square':90,'sexti
 ASPECT_WEIGHTS = {'conjunction':3,'trine':2,'sextile':1,'opposition':-1,'square':-1.5}
 
 # Which planet pairs matter most for love compatibility
+# Synastry pairs — (chart1_planet, chart2_planet, weight)
+# We check BOTH directions for each pair so no connection is missed
 LOVE_PAIRS = [
-    ('sun','moon',3.0),('sun','venus',2.5),('moon','venus',2.0),
-    ('venus','mars',3.0),('sun','asc',2.0),('moon','asc',1.5),
-    ('venus','asc',1.5),('sun','sun',1.0),('moon','moon',1.0),
-    ('northNode','sun',1.5),('northNode','moon',1.5),('northNode','venus',2.0),
-    ('asc','asc',1.0),('sun','mars',1.5),('moon','mars',1.0),
+    # Tier 1 — Soul level (highest weight)
+    ('sun',  'moon',   3.0),  # Sun-Moon: emotional recognition, "home" feeling
+    ('moon', 'sun',    3.0),  # Reverse: his Moon to her Sun (your case!)
+    ('venus','mars',   3.0),  # Venus-Mars: magnetic attraction
+    ('mars', 'venus',  3.0),  # Reverse
+    ('sun',  'venus',  2.5),  # Sun-Venus: warmth, admiration, genuine like
+    ('venus','sun',    2.5),  # Reverse
+    ('moon', 'moon',   2.5),  # Moon-Moon: deep emotional resonance
+    ('sun',  'sun',    2.0),  # Sun-Sun: core identity alignment
+
+    # Tier 2 — Destiny connections
+    ('northNode','sun',   2.0),  # Node-Sun: karmic destiny
+    ('sun','northNode',   2.0),  # Reverse
+    ('northNode','moon',  2.0),  # Node-Moon: emotional karma
+    ('moon','northNode',  2.0),  # Reverse
+    ('northNode','venus', 2.5),  # Node-Venus: destined love
+    ('venus','northNode', 2.5),  # Reverse
+
+    # Tier 3 — Magnetic pull
+    ('sun',  'asc',    2.0),  # Sun-ASC: instant recognition
+    ('asc',  'sun',    2.0),  # Reverse
+    ('moon', 'asc',    1.5),  # Moon-ASC: emotional comfort
+    ('asc',  'moon',   1.5),  # Reverse
+    ('venus','asc',    1.5),  # Venus-ASC: physical attraction
+    ('asc',  'venus',  1.5),  # Reverse
+    ('moon', 'venus',  2.0),  # Moon-Venus: tenderness
+    ('venus','moon',   2.0),  # Reverse
+
+    # Tier 4 — Passion and drive
+    ('sun',  'mars',   1.5),  # Sun-Mars: vitality, drive
+    ('mars', 'sun',    1.5),  # Reverse
+    ('moon', 'mars',   1.0),  # Moon-Mars: emotional passion
+    ('mars', 'moon',   1.0),  # Reverse
+    ('asc',  'asc',    1.0),  # ASC-ASC: physical type match
 ]
+
+# Aspect meanings for display
+ASPECT_MEANINGS = {
+    ('sun','moon'):    'emotional recognition — the "home" feeling',
+    ('moon','sun'):    'emotional recognition — the "home" feeling',
+    ('venus','mars'):  'magnetic attraction and physical chemistry',
+    ('mars','venus'):  'magnetic attraction and physical chemistry',
+    ('sun','venus'):   'warmth, admiration and genuine affection',
+    ('venus','sun'):   'warmth, admiration and genuine affection',
+    ('moon','moon'):   'deep emotional resonance and intuitive understanding',
+    ('northNode','venus'): 'destined love — karmic romantic connection',
+    ('venus','northNode'): 'destined love — karmic romantic connection',
+    ('northNode','sun'):   'karmic soul recognition',
+    ('sun','northNode'):   'karmic soul recognition',
+    ('sun','asc'):     'instant recognition — you see each other clearly',
+    ('asc','sun'):     'instant recognition — you see each other clearly',
+    ('venus','asc'):   'physical attraction and magnetic pull',
+    ('asc','venus'):   'physical attraction and magnetic pull',
+    ('moon','venus'):  'tenderness and emotional affection',
+    ('venus','moon'):  'tenderness and emotional affection',
+}
 
 def get_aspect(lon1, lon2):
     diff = abs(lon1 - lon2) % 360
@@ -407,32 +459,29 @@ def calc_synastry(chart1_planets, chart2_planets):
     max_possible = 0
     aspects_found = []
 
+    seen_pairs = set()  # avoid double counting same planetary pair
     for key1, key2, weight in LOVE_PAIRS:
         if key1 not in p1 or key2 not in p2: continue
-        max_possible += weight * ASPECT_WEIGHTS['conjunction']  # best case
+
+        # Skip if we already scored this exact planetary pair
+        pair_key = tuple(sorted([key1, key2]))
+        if pair_key in seen_pairs: continue
+        seen_pairs.add(pair_key)
+
+        max_possible += weight * ASPECT_WEIGHTS['conjunction']
 
         aspect, orb = get_aspect(p1[key1], p2[key2])
         if aspect:
             aspect_weight = ASPECT_WEIGHTS[aspect]
             pair_score = weight * aspect_weight
             total_score += pair_score
+            meaning = ASPECT_MEANINGS.get((key1,key2), '')
             aspects_found.append({
                 'planet1': key1, 'planet2': key2,
                 'aspect': aspect, 'orb': round(orb, 1),
                 'score': round(pair_score, 2),
+                'meaning': meaning,
             })
-        
-        # Also check reverse (chart2 planet1 to chart1 planet2)
-        if key2 in p1 and key1 in p2:
-            aspect2, orb2 = get_aspect(p1[key2], p2[key1])
-            if aspect2 and aspect2 != aspect:
-                pair_score2 = weight * ASPECT_WEIGHTS[aspect2]
-                total_score += pair_score2 * 0.5  # slightly less weight for reverse
-                aspects_found.append({
-                    'planet1': key2, 'planet2': key1,
-                    'aspect': aspect2, 'orb': round(orb2,1),
-                    'score': round(pair_score2*0.5, 2),
-                })
 
     # Normalize to 0-100
     if max_possible > 0:
