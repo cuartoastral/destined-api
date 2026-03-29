@@ -7,7 +7,16 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 import swisseph as swe
 import math, os, urllib.request, urllib.parse, json, hashlib
-from payments import generate_ai_reading, send_reading_email, create_stripe_session
+# Payments module — imported conditionally to avoid startup crashes
+try:
+    from payments import generate_ai_reading, send_reading_email, create_stripe_session
+    PAYMENTS_AVAILABLE = True
+except Exception as _pay_err:
+    PAYMENTS_AVAILABLE = False
+    print(f"Warning: payments module not loaded: {_pay_err}")
+    def generate_ai_reading(u): return None, "Payments module not available"
+    def send_reading_email(*a, **k): return False, "Payments module not available"
+    def create_stripe_session(*a, **k): return None, "Payments module not available" 
 
 app = Flask(__name__)
 CORS(app)
@@ -1091,7 +1100,6 @@ def deliver_reading_get():
         user = users[0]
         if user.get('reading_delivered'):
             return f"<h2 style='font-family:serif;color:green;padding:40px'>✓ Reading already delivered to {user['email']} — check your inbox!</h2>"
-        from payments import generate_ai_reading, send_reading_email
         reading, err = generate_ai_reading(user)
         if err:
             return f"<h2 style='font-family:serif;color:red;padding:40px'>✗ Reading generation failed: {err}</h2>"
