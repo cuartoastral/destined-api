@@ -18,6 +18,8 @@ except Exception as _pay_err:
     def send_reading_email(*a, **k): return False, "Payments module not available"
     def create_stripe_session(*a, **k): return None, "Payments module not available" 
 
+FOUNDING_MEMBER_CAP = 200  # Free forever for first 200 members
+
 app = Flask(__name__)
 CORS(app)
 swe.set_ephe_path('')
@@ -634,16 +636,38 @@ def send_welcome_email(to_email, name, sun_sign, moon_sign, asc_sign, user_id):
 def health():
     db_status     = 'connected'    if SUPABASE_URL                          else 'not configured'
     resend_status = 'configured'   if os.environ.get('RESEND_API_KEY','')   else 'missing — add RESEND_API_KEY to Render'
+    try:
+        all_users, _ = supabase_request('GET', 'users', params={'select':'id'})
+        member_count  = len(all_users) if all_users else 0
+    except:
+        member_count = 0
     return jsonify({
-        'status':   'ok',
-        'engine':   'Swiss Ephemeris',
-        'version':  swe.version,
-        'timezone': 'built-in geo database (no extra deps)',
-        'database': db_status,
-        'resend':   resend_status,
+        'status':          'ok',
+        'engine':          'Swiss Ephemeris',
+        'version':         swe.version,
+        'timezone':        'built-in geo database (no extra deps)',
+        'database':        db_status,
+        'resend':          resend_status,
+        'members':         member_count,
+        'spots_remaining': max(0, 200 - member_count),
     })
 
 
+
+
+@app.route('/founding-status', methods=['GET'])
+def founding_status():
+    """Returns founding member count and spots remaining."""
+    members, _ = supabase_request('GET', 'users', params={'select':'id','limit':'200'})
+    count = len(members) if members else 0
+    return jsonify({
+        'success':       True,
+        'members':       count,
+        'cap':           FOUNDING_MEMBER_CAP,
+        'spots_left':    max(0, FOUNDING_MEMBER_CAP - count),
+        'is_founding':   count < FOUNDING_MEMBER_CAP,
+        'pct_full':      round((count / FOUNDING_MEMBER_CAP) * 100),
+    })
 
 @app.route('/email-debug', methods=['GET'])
 def email_debug():
@@ -802,11 +826,35 @@ def register_user():
         if age < 18:
             return jsonify({'error':'Must be 18 or older'}), 400
 
+        # Check founding member cap
+        all_members, _ = supabase_request('GET', 'users', params={'select':'id','limit':'500'})
+        member_count = len(all_members) if all_members else 0
+        is_founding  = member_count < 200
+        member_number = member_count + 1
+
         # Check if email already exists
         existing, err = supabase_request('GET', 'users',
             params={'email': f'eq.{data["email"]}', 'select': 'id'})
         if existing and len(existing) > 0:
             return jsonify({'error':'Email already registered','exists':True}), 409
+
+        # Count total members for founding member tracking
+        all_members, _ = supabase_request('GET', 'users', params={'select':'id'})
+        member_count = len(all_members) if all_members else 0
+        founding_member = member_count < 200
+        founding_number = member_count + 1
+
+        # Check founding member cap (200 free spots)
+        FOUNDING_CAP = 200
+        all_users, _ = supabase_request('GET', 'users', params={'select':'id'})
+        current_count = len(all_users) if all_users else 0
+        if current_count >= FOUNDING_CAP:
+            return jsonify({
+                'error': 'Founding membership is full',
+                'founding_full': True,
+                'message': 'All 200 founding spots have been claimed. Join the waitlist.'
+            }), 403
+        founding_number = current_count + 1
 
         # Calculate the chart
         year=int(data['year']); month=int(data['month']); day=int(data['day'])
@@ -862,6 +910,9 @@ def register_user():
             'venus_sign':  next((p['sign'] for p in planets_result if p['key']=='venus'),None),
             'mars_sign':   next((p['sign'] for p in planets_result if p['key']=='mars'),None),
             'dominant_element': max(el_counts, key=el_counts.get),
+            # Founding member status
+            'founding_member': is_founding,
+            'member_number':   member_number,
             # Full chart JSON for display
             'chart_json':  json.dumps({
                 'planets':planets_result,'houses':houses_data,
@@ -890,7 +941,14 @@ def register_user():
         except Exception as email_err:
             print(f"Welcome email failed (non-fatal): {email_err}")
 
-        return jsonify({'success':True,'userId':user_id,'message':'Welcome to Destined!'})
+        return jsonify({
+            'success':       True,
+            'userId':        user_id,
+            'message':       f'Welcome to Destined! You are founding member #{member_number}.' if is_founding else 'Welcome to Destined!',
+            'founding':      is_founding,
+            'memberNumber':  member_number,
+            'remaining':     max(0, 200 - member_number),
+        })
 
     except Exception as e:
         return jsonify({'error':str(e),'success':False}), 500
@@ -898,92 +956,136 @@ def register_user():
 
 @app.route('/matches/<user_id>', methods=['GET'])
 def get_matches(user_id):
-    """
-    Get top compatibility matches for a user.
-    Calculates synastry score against all compatible users in DB.
-    """
+    """Get top compatibility matches with age filter, mutual seeking, and founding member count."""
     try:
-        # Get the requesting user
-        user_data, err = supabase_request('GET', 'users',
-            params={'id':'eq.'+user_id, 'select':'*'})
+        user_data, err = supabase_request('GET', 'users', params={'id':'eq.'+user_id, 'select':'*'})
         if err or not user_data:
             return jsonify({'error':'User not found'}), 404
         user = user_data[0]
 
-        # Determine who to match against based on seeking preference
-        seeking = user.get('seeking','Everyone')
-        if seeking == 'Women':
-            gender_filter = 'eq.Woman'
-        elif seeking == 'Men':
-            gender_filter = 'eq.Man'
-        else:
-            gender_filter = None  # Everyone
+        seeking    = user.get('seeking','Everyone')
+        user_gender = user.get('gender','')
 
-        # Fetch potential matches (exclude self)
-        params = {'id': f'neq.{user_id}', 'select': '*', 'limit': '200'}
+        if seeking == 'Women':   gender_filter = 'eq.Woman'
+        elif seeking == 'Men':   gender_filter = 'eq.Man'
+        else:                    gender_filter = None
+
+        params = {'id': f'neq.{user_id}', 'select': '*', 'limit': '500'}
         if gender_filter:
             params['gender'] = gender_filter
 
         candidates, err = supabase_request('GET', 'users', params=params)
         if err:
-            return jsonify({'error':f'Database error: {err}'}), 500
+            return jsonify({'error': f'Database error: {err}'}), 500
+
+        # Total member count for founding member display
+        all_users, _ = supabase_request('GET', 'users', params={'select':'id'})
+        total_members    = len(all_users) if all_users else 0
+        founding_spots_left = max(0, 200 - total_members)
+
         if not candidates:
-            return jsonify({'success':True,'matches':[],'total':0})
+            return jsonify({'success':True,'matches':[],'total':0,
+                'totalMembers':total_members,'foundingLeft':founding_spots_left,'isFounding':total_members<=200})
 
-        # Build user's planet list from stored longitudes
+        # Age range filter
+        def parse_age_range(r):
+            if not r: return None, None
+            r = r.replace('+','').strip()
+            if '-' in r:
+                parts = r.split('-')
+                try: return int(parts[0]), int(parts[1])
+                except: return None, None
+            try: return int(r), 99
+            except: return None, None
+
+        from datetime import date
+        current_year = date.today().year
+        seek_min, seek_max = parse_age_range(user.get('seek_age_range',''))
+
         user_planets = build_planets_from_record(user)
-
-        # Score each candidate
         scored = []
+
         for candidate in candidates:
+            # Age filter
+            birth_year = candidate.get('birth_year')
+            if birth_year and seek_min and seek_max:
+                age = current_year - birth_year
+                if age < seek_min or age > seek_max:
+                    continue
+
+            # Mutual seeking filter — candidate must also be open to user's gender
+            cand_seeking = candidate.get('seeking','Everyone')
+            if cand_seeking != 'Everyone' and user_gender:
+                if cand_seeking == 'Women' and user_gender != 'Woman': continue
+                if cand_seeking == 'Men'   and user_gender != 'Man':   continue
+
             cand_planets = build_planets_from_record(candidate)
             score, aspects = calc_synastry(user_planets, cand_planets)
-            
-            # Filter by age preference (basic check)
+
             scored.append({
-                'userId':     candidate['id'],
-                'name':       candidate['name'],
-                'sunSign':    candidate.get('sun_sign',''),
-                'moonSign':   candidate.get('moon_sign',''),
-                'ascSign':    candidate.get('asc_sign',''),
-                'venusSign':  candidate.get('venus_sign',''),
-                'marsSign':   candidate.get('mars_sign',''),
+                'userId':          candidate['id'],
+                'name':            candidate['name'],
+                'sunSign':         candidate.get('sun_sign',''),
+                'moonSign':        candidate.get('moon_sign',''),
+                'ascSign':         candidate.get('asc_sign',''),
+                'venusSign':       candidate.get('venus_sign',''),
+                'marsSign':        candidate.get('mars_sign',''),
                 'dominantElement': candidate.get('dominant_element',''),
-                'birthYear':  candidate.get('birth_year'),
-                'gender':     candidate.get('gender',''),
-                'city':       candidate.get('birth_city',''),
-                'score':      score,
-                'aspects':    aspects[:5],  # top 5 aspects
+                'birthYear':       birth_year,
+                'gender':          candidate.get('gender',''),
+                'city':            candidate.get('birth_city',''),
+                'score':           score,
+                'aspects':         aspects[:6],
             })
 
-        # Sort by score descending
         scored.sort(key=lambda x: x['score'], reverse=True)
 
         return jsonify({
-            'success': True,
-            'matches': scored[:20],  # top 20 matches
-            'total': len(scored),
+            'success':      True,
+            'matches':      scored[:20],
+            'total':        len(scored),
+            'totalMembers': total_members,
+            'foundingLeft': founding_spots_left,
+            'isFounding':   total_members <= 200,
         })
 
     except Exception as e:
-        return jsonify({'error':str(e)}), 500
+        return jsonify({'error': str(e)}), 500
 
 
-def build_planets_from_record(record):
-    """Reconstruct planet list from stored DB longitudes."""
-    keys = ['sun','moon','mercury','venus','mars','jupiter','saturn',
-            'uranus','neptune','pluto','northNode','asc','mc']
-    db_keys = ['sun','moon','mercury','venus','mars','jupiter','saturn',
-               'uranus','neptune','pluto','north_node','asc','mc']
-    planets = []
-    for key, db_key in zip(keys, db_keys):
-        lon = record.get(f'{db_key}_lon')
-        if lon is not None:
-            planets.append({'key':key,'lon':float(lon)})
-    return planets
+@app.route('/founding-count', methods=['GET'])
+def founding_count():
+    """Public endpoint — returns founding member count and spots remaining."""
+    try:
+        all_users, _ = supabase_request('GET', 'users', params={'select':'id'})
+        count = len(all_users) if all_users else 0
+        return jsonify({
+            'success':        True,
+            'members':        count,
+            'cap':            200,
+            'spots_remaining': max(0, 200 - count),
+            'is_full':        count >= 200,
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 
-
+@app.route('/founding-stats', methods=['GET'])
+def founding_stats():
+    """Get founding member stats for landing page counter."""
+    users, err = supabase_request('GET', 'users', params={'select':'id', 'limit':'500'})
+    if err:
+        return jsonify({'error': err}), 500
+    total     = len(users) if users else 0
+    spots_left = max(0, FOUNDING_MEMBER_CAP - total)
+    return jsonify({
+        'success':      True,
+        'total':        total,
+        'cap':          FOUNDING_MEMBER_CAP,
+        'spotsLeft':    spots_left,
+        'isFull':       total >= FOUNDING_MEMBER_CAP,
+        'pctFull':      round((total / FOUNDING_MEMBER_CAP) * 100),
+    })
 
 @app.route('/user-by-email', methods=['GET'])
 def user_by_email():
@@ -1133,6 +1235,27 @@ def reading_status():
         'stripe':    'configured' if os.environ.get('STRIPE_SECRET_KEY') else 'missing',
         'anthropic': 'configured' if os.environ.get('ANTHROPIC_API_KEY') else 'missing',
     })
+
+
+
+@app.route('/founding-status', methods=['GET'])
+def founding_status():
+    """Get founding member status — how many spots remain."""
+    try:
+        members, err = supabase_request('GET', 'users', 
+            params={'select':'id','limit':'500'})
+        count = len(members) if members else 0
+        remaining = max(0, 200 - count)
+        return jsonify({
+            'success':   True,
+            'total':     count,
+            'cap':       200,
+            'remaining': remaining,
+            'is_open':   remaining > 0,
+            'message':   f'{remaining} of 200 founding spots remaining' if remaining > 0 else 'Founding membership is now closed',
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 
 @app.route('/deliver-reading-get', methods=['GET'])
@@ -1407,6 +1530,42 @@ def slr_submit():
         return jsonify({'success': True, 'message': f'Report delivered to {order["customer_email"]}'})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+
+@app.route('/founding-count', methods=['GET'])
+def founding_count():
+    """Get current founding member count for landing page display."""
+    members, err = supabase_request('GET', 'users', params={'select':'id'})
+    if err:
+        return jsonify({'error': err}), 500
+    count = len(members) if members else 0
+    return jsonify({
+        'success':        True,
+        'total':          count,
+        'spotsRemaining': max(0, 200 - count),
+        'spotsTotal':     200,
+        'isFull':         count >= 200,
+        'pctFilled':      min(100, round((count / 200) * 100)),
+    })
+
+
+@app.route('/stats', methods=['GET'])
+def stats():
+    """Public stats — founding member count."""
+    users, err = supabase_request('GET', 'users',
+        params={'select': 'id', 'limit': '500'})
+    count = len(users) if users else 0
+    founding_cap  = 200
+    spots_taken   = count
+    spots_left    = max(0, founding_cap - spots_taken)
+    return jsonify({
+        'success':       True,
+        'totalMembers':  count,
+        'foundingCap':   founding_cap,
+        'spotsTaken':    spots_taken,
+        'spotsLeft':     spots_left,
+        'isFull':        spots_left == 0,
+    })
 
 @app.route('/geocode', methods=['GET'])
 def geocode():
