@@ -1161,6 +1161,253 @@ def deliver_reading_get():
     except Exception as e:
         return f"<h2 style='font-family:serif;color:red;padding:40px'>✗ Error: {str(e)}</h2>"
 
+
+# ══════════════════════════════════════════
+# SPIRITUAL LEVEL REPORT ENDPOINTS
+# ══════════════════════════════════════════
+
+def send_slr_email(to_email, person1_name, person2_name, scores, resend_key):
+    """Send the Spiritual Level Report to customer."""
+    vibration = scores.get('vibration', 0)
+    readiness = scores.get('readiness', 0)
+    divine    = scores.get('divine', 0)
+    union     = scores.get('union', 0)
+    past_life = scores.get('past_life', 'Uncertain')
+    contract  = scores.get('contract', 'Uncertain')
+    note      = scores.get('note', '')
+
+    def bar(pct):
+        filled = int(pct / 5)
+        return '█' * filled + '░' * (20 - filled) + f' {pct}%'
+
+    html = f"""<!DOCTYPE html><html><head><meta charset="UTF-8"></head>
+<body style="margin:0;padding:0;background:#06060f;font-family:Georgia,serif;">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#06060f;padding:40px 20px;">
+<tr><td align="center"><table width="600" cellpadding="0" cellspacing="max-width:600px;width:100%;">
+<tr><td style="text-align:center;padding:40px 40px 32px;border-bottom:1px solid rgba(155,122,200,.2);">
+  <div style="font-size:11px;letter-spacing:6px;color:#c9a84c;text-transform:uppercase;margin-bottom:8px;">DESTINED</div>
+  <div style="font-size:11px;letter-spacing:3px;color:rgba(196,168,232,.6);text-transform:uppercase;">Spiritual Level Report</div>
+</td></tr>
+<tr><td style="background:#0d0b1e;padding:48px 40px;">
+  <p style="font-size:13px;letter-spacing:3px;color:#c9a84c;text-transform:uppercase;margin:0 0 12px;">A reading for</p>
+  <h1 style="font-size:28px;font-weight:300;color:#f0eefc;line-height:1.3;margin:0 0 32px;">
+    {person1_name} <em style="color:#c4a8e8;font-style:italic;">&</em> {person2_name}
+  </h1>
+
+  <div style="background:rgba(155,122,200,.05);border:1px solid rgba(155,122,200,.15);padding:28px;margin-bottom:28px;">
+    <div style="font-size:10px;letter-spacing:3px;color:#c4a8e8;text-transform:uppercase;margin-bottom:20px;">Frequency Scores</div>
+
+    <table width="100%" cellpadding="0" cellspacing="0">
+      <tr><td style="padding:10px 0;border-bottom:1px solid rgba(255,255,255,.05);">
+        <span style="font-size:13px;color:#a8a8c0;">⚡ Vibrational Match</span>
+        <span style="font-size:18px;font-style:italic;color:#c4a8e8;float:right;">{vibration}%</span>
+      </td></tr>
+      <tr><td style="padding:10px 0;border-bottom:1px solid rgba(255,255,255,.05);">
+        <span style="font-size:13px;color:#a8a8c0;">💗 Relationship Readiness</span>
+        <span style="font-size:18px;font-style:italic;color:#c4a8e8;float:right;">{readiness}%</span>
+      </td></tr>
+      <tr><td style="padding:10px 0;border-bottom:1px solid rgba(255,255,255,.05);">
+        <span style="font-size:13px;color:#a8a8c0;">✨ Divine Appointment</span>
+        <span style="font-size:18px;font-style:italic;color:#c4a8e8;float:right;">{divine}%</span>
+      </td></tr>
+      <tr><td style="padding:10px 0;">
+        <span style="font-size:13px;color:#a8a8c0;">🌿 Union Potential</span>
+        <span style="font-size:18px;font-style:italic;color:#c4a8e8;float:right;">{union}%</span>
+      </td></tr>
+    </table>
+  </div>
+
+  <div style="margin-bottom:24px;">
+    <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid rgba(255,255,255,.05);font-size:13px;">
+      <span style="color:#a8a8c0;">🔁 Past Life Connection</span>
+      <span style="color:#e8c96d;font-style:italic;">{past_life}</span>
+    </div>
+    <div style="display:flex;justify-content:space-between;padding:10px 0;font-size:13px;">
+      <span style="color:#a8a8c0;">📖 Soul Contract Type</span>
+      <span style="color:#e8c96d;font-style:italic;">{contract}</span>
+    </div>
+  </div>
+
+  {f'''<div style="border-left:2px solid rgba(155,122,200,.4);padding:16px 20px;background:rgba(155,122,200,.04);margin-bottom:28px;">
+    <div style="font-size:10px;letter-spacing:2px;color:#c4a8e8;text-transform:uppercase;margin-bottom:8px;">Practitioner Note</div>
+    <p style="font-size:15px;font-style:italic;color:#f0eefc;line-height:1.8;margin:0;">&ldquo;{note}&rdquo;</p>
+  </div>''' if note else ''}
+
+  <p style="font-size:12px;color:rgba(168,168,192,.4);text-align:center;line-height:1.8;font-style:italic;">
+    The only entity who knows the full truth of any soul connection is God.<br>
+    This report is offered in the spirit of guidance, not certainty.
+  </p>
+</td></tr>
+<tr><td style="padding:24px;text-align:center;">
+  <p style="font-size:11px;color:rgba(168,168,192,.3);letter-spacing:2px;text-transform:uppercase;margin:0;">DESTINED · destined.cuartoastral.com</p>
+</td></tr>
+</table></td></tr></table>
+</body></html>"""
+
+    try:
+        import http.client, ssl
+        payload = json.dumps({
+            "from":    "Destined <info@cuartoastral.com>",
+            "to":      [to_email],
+            "subject": f"✨ Your Spiritual Level Report — {person1_name} & {person2_name}",
+            "html":    html,
+        }).encode('utf-8')
+        headers = {
+            "Authorization": f"Bearer {resend_key}",
+            "Content-Type":  "application/json",
+            "Accept":        "application/json",
+            "User-Agent":    "Destined-App/1.0",
+        }
+        ctx  = ssl.create_default_context()
+        conn = http.client.HTTPSConnection("api.resend.com", context=ctx, timeout=15)
+        conn.request("POST", "/emails", body=payload, headers=headers)
+        resp = conn.getresponse()
+        body = resp.read().decode()
+        conn.close()
+        return resp.status in (200, 201), body
+    except Exception as e:
+        return False, str(e)
+
+
+@app.route('/create-slr-payment', methods=['POST'])
+def create_slr_payment():
+    """Create Stripe checkout for Spiritual Level Report."""
+    try:
+        data = request.get_json() or {}
+        price    = data.get('price', 27)
+        delivery = data.get('delivery', '48 hours')
+        email    = data.get('email', '')
+        person1  = data.get('person1', {})
+        person2  = data.get('person2', {})
+        question = data.get('question', '')
+
+        if not email or not person1 or not person2:
+            return jsonify({'error': 'Missing required fields'}), 400
+
+        # Store order in Supabase first
+        order = {
+            'customer_email': email,
+            'price':          price,
+            'delivery':       delivery,
+            'person1_name':   person1.get('name',''),
+            'person1_dob':    person1.get('dob',''),
+            'person1_city':   person1.get('city',''),
+            'person1_time':   person1.get('time',''),
+            'person2_name':   person2.get('name',''),
+            'person2_dob':    person2.get('dob',''),
+            'person2_city':   person2.get('city',''),
+            'person2_time':   person2.get('time',''),
+            'question':       question,
+            'completed':      False,
+        }
+        result, err = supabase_request('POST', 'slr_orders', order)
+        if err:
+            return jsonify({'error': f'Database error: {err}'}), 500
+
+        order_id = result[0]['id'] if result else 'unknown'
+
+        # Create Stripe session
+        import base64, urllib.parse
+        amount_cents = price * 100
+        success_url = f"https://destined.cuartoastral.com/spiritual-level-report.html?order=success&orderId={order_id}"
+        cancel_url  = f"https://destined.cuartoastral.com/spiritual-level-report.html"
+
+        payload = urllib.parse.urlencode({
+            'payment_method_types[]':                              'card',
+            'line_items[0][price_data][currency]':                 'usd',
+            'line_items[0][price_data][unit_amount]':              str(amount_cents),
+            'line_items[0][price_data][product_data][name]':       f'Spiritual Level Report — {delivery} delivery',
+            'line_items[0][price_data][product_data][description]':'Energetic compatibility assessment by certified practitioner',
+            'line_items[0][quantity]':                             '1',
+            'mode':                                                'payment',
+            'success_url':                                         success_url,
+            'cancel_url':                                          cancel_url,
+            'customer_email':                                      email,
+            'metadata[order_id]':                                  order_id,
+        }).encode('utf-8')
+
+        stripe_key = os.environ.get('STRIPE_SECRET_KEY','')
+        auth = base64.b64encode(f"{stripe_key}:".encode()).decode()
+        import http.client, ssl
+        ctx  = ssl.create_default_context()
+        conn = http.client.HTTPSConnection("api.stripe.com", context=ctx, timeout=15)
+        conn.request("POST", "/v1/checkout/sessions", body=payload,
+            headers={'Authorization':f'Basic {auth}','Content-Type':'application/x-www-form-urlencoded'})
+        resp = conn.getresponse()
+        body = json.loads(resp.read().decode())
+        conn.close()
+
+        if resp.status == 200:
+            return jsonify({'success': True, 'checkoutUrl': body['url']})
+        else:
+            return jsonify({'error': f'Stripe error: {body}'}), 500
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/slr-orders', methods=['GET'])
+def slr_orders():
+    """Get all SLR orders for practitioner portal."""
+    admin_key = request.headers.get('X-Admin-Key','')
+    if admin_key != os.environ.get('ADMIN_PASSWORD','destined2025'):
+        return jsonify({'error':'Unauthorized'}), 401
+    orders, err = supabase_request('GET', 'slr_orders',
+        params={'select':'*','order':'created_at.desc','limit':'100'})
+    if err:
+        return jsonify({'error': err}), 500
+    return jsonify({'success': True, 'orders': orders or []})
+
+
+@app.route('/slr-submit', methods=['POST'])
+def slr_submit():
+    """Practitioner submits assessment — triggers email delivery."""
+    admin_key = request.headers.get('X-Admin-Key','')
+    if admin_key != os.environ.get('ADMIN_PASSWORD','destined2025'):
+        return jsonify({'error':'Unauthorized'}), 401
+    try:
+        data     = request.get_json() or {}
+        order_id = data.get('orderId','')
+        if not order_id:
+            return jsonify({'error':'orderId required'}), 400
+
+        # Get order
+        orders, err = supabase_request('GET','slr_orders',
+            params={'id':f'eq.{order_id}','select':'*'})
+        if err or not orders:
+            return jsonify({'error':'Order not found'}), 404
+        order = orders[0]
+
+        scores = {
+            'vibration': data.get('vibration', 70),
+            'readiness': data.get('readiness', 70),
+            'divine':    data.get('divine', 70),
+            'union':     data.get('union', 70),
+            'past_life': data.get('pastLife','Uncertain'),
+            'contract':  data.get('contract','Uncertain'),
+            'note':      data.get('note',''),
+        }
+
+        # Send email
+        resend_key = os.environ.get('RESEND_API_KEY','')
+        sent, detail = send_slr_email(
+            order['customer_email'],
+            order['person1_name'],
+            order['person2_name'],
+            scores, resend_key
+        )
+        if not sent:
+            return jsonify({'error': f'Email failed: {detail}'}), 500
+
+        # Mark completed
+        supabase_request('PATCH','slr_orders',
+            data={'completed':True,'scores':json.dumps(scores)},
+            params={'id':f'eq.{order_id}'})
+
+        return jsonify({'success': True, 'message': f'Report delivered to {order["customer_email"]}'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/geocode', methods=['GET'])
 def geocode():
     query = request.args.get('q','')
