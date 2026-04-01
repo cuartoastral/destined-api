@@ -1238,7 +1238,6 @@ def reading_status():
 
 
 
-@app.route('/founding-status', methods=['GET'])
 def founding_status():
     """Get founding member status — how many spots remain."""
     try:
@@ -1532,7 +1531,6 @@ def slr_submit():
         return jsonify({'error': str(e)}), 500
 
 
-@app.route('/founding-count', methods=['GET'])
 def founding_count():
     """Get current founding member count for landing page display."""
     members, err = supabase_request('GET', 'users', params={'select':'id'})
