@@ -838,24 +838,6 @@ def register_user():
         if existing and len(existing) > 0:
             return jsonify({'error':'Email already registered','exists':True}), 409
 
-        # Count total members for founding member tracking
-        all_members, _ = supabase_request('GET', 'users', params={'select':'id'})
-        member_count = len(all_members) if all_members else 0
-        founding_member = member_count < 200
-        founding_number = member_count + 1
-
-        # Check founding member cap (200 free spots)
-        FOUNDING_CAP = 200
-        all_users, _ = supabase_request('GET', 'users', params={'select':'id'})
-        current_count = len(all_users) if all_users else 0
-        if current_count >= FOUNDING_CAP:
-            return jsonify({
-                'error': 'Founding membership is full',
-                'founding_full': True,
-                'message': 'All 200 founding spots have been claimed. Join the waitlist.'
-            }), 403
-        founding_number = current_count + 1
-
         # Calculate the chart
         year=int(data['year']); month=int(data['month']); day=int(data['day'])
         hour=int(data.get('hour',12)); minute=int(data.get('minute',0))
@@ -910,9 +892,6 @@ def register_user():
             'venus_sign':  next((p['sign'] for p in planets_result if p['key']=='venus'),None),
             'mars_sign':   next((p['sign'] for p in planets_result if p['key']=='mars'),None),
             'dominant_element': max(el_counts, key=el_counts.get),
-            # Founding member status
-            'founding_member': is_founding,
-            'member_number':   member_number,
             # Full chart JSON for display
             'chart_json':  json.dumps({
                 'planets':planets_result,'houses':houses_data,
