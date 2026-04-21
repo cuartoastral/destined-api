@@ -67,6 +67,7 @@ TZ_DB = {
     'America/Phoenix': -7, 'America/Detroit': -5, 'America/Indiana/Indianapolis': -5,
     'America/Bogota': -5, 'America/Lima': -5, 'America/Guayaquil': -5,
     'America/Caracas': -4, 'America/La_Paz': -4, 'America/Manaus': -4,
+    'America/Caracas_historic': -4.5,  # Venezuela before Dec 9, 2007
     'America/Halifax': -4, 'America/Santo_Domingo': -4, 'America/Puerto_Rico': -4,
     'America/Sao_Paulo': -3, 'America/Argentina/Buenos_Aires': -3,
     'America/Santiago': -4, 'America/Asuncion': -4, 'America/Montevideo': -3,
@@ -210,13 +211,25 @@ def resolve_utc_offset(year, month, day, hour, minute, lat, lon):
         base = TZ_DB[tz_name]
         is_dst = False
         extra = 0
+
+        # Venezuela special case: UTC-4:30 before Dec 9, 2007
+        if tz_name == 'America/Caracas':
+            if year < 2007 or (year == 2007 and month < 12) or (year == 2007 and month == 12 and day < 9):
+                return -4.5, 'America/Caracas (historic -4:30)', False
+            else:
+                return -4.0, 'America/Caracas', False
+
+        # Brazil abolished DST in 2019
         if tz_name in DST_RULES:
             dst_add, dst_months = DST_RULES[tz_name]
             if month in dst_months:
                 if not (tz_name == 'America/Sao_Paulo' and year >= 2019):
                     is_dst = True
                     extra = dst_add
+
         return base + extra, tz_name, is_dst
+
+    # Fallback: estimate from longitude (every 15° = 1 hour, rounded to 30min)
     offset = round(lon / 15 * 2) / 2
     return offset, f'Estimated ({lon:.1f}°)', False
 
